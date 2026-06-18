@@ -8,61 +8,74 @@ import pandas as pd
 def calculate_comprehensive_metrics(ticker_symbol: str):
     try:
         ticker = yf.Ticker(ticker_symbol.strip().upper())
+        # 6 months is plenty of depth to cover a 66 trading day lookback
         df = ticker.history(period="6mo")
 
-        if df.empty or len(df) < 15:
+        if df.empty:
             return None
 
         # 1. Current Session Metrics
         current_vol = int(df['Volume'].iloc[-1])
         
-        # Isolate history (exclude live session)
+        # Isolate history up to yesterday (excludes live session)
         df_hist = df.iloc[:-1]
+        available_days = len(df_hist)
 
-        # 2. Base Lookbacks (Current Week Snapshots)
-        adv_5  = df_hist['Volume'].tail(5).mean()
-        adv_30 = df_hist['Volume'].tail(30).mean()
-        adv_60 = df_hist['Volume'].tail(60).mean()
-        adv_90 = df_hist['Volume'].tail(90).mean()
-        pov_15_curr = adv_5 * 0.15
+        # 2. Dynamic Trading Day Lookbacks (22 days per market month)
+        adv_5  = round(df_hist['Volume'].tail(5).mean())  if available_days >= 5  else "N/A"
+        adv_22 = round(df_hist['Volume'].tail(22).mean()) if available_days >= 22 else "N/A"
+        adv_44 = round(df_hist['Volume'].tail(44).mean()) if available_days >= 44 else "N/A"
+        adv_66 = round(df_hist['Volume'].tail(66).mean()) if available_days >= 66 else "N/A"
+        
+        # 3. 15% ADV Limits Based on Refined Averages
+        pov_15_curr = round(adv_5 * 0.15)  if adv_5  != "N/A" else "N/A"
+        pov_22_curr = round(adv_22 * 0.15) if adv_22 != "N/A" else "N/A"
+        pov_44_curr = round(adv_44 * 0.15) if adv_44 != "N/A" else "N/A"
+        pov_66_curr = round(adv_66 * 0.15) if adv_66 != "N/A" else "N/A"
 
-        # 3. Previous Week Lookback (Shifted back 5 trading days to calculate WoW change)
-        df_prev_week = df_hist.iloc[:-5]
-        adv_5_prev = df_prev_week['Volume'].tail(5).mean() if len(df_prev_week) >= 5 else None
-        pov_15_prev = adv_5_prev * 0.15 if adv_5_prev else None
-
-        # Calculate percentage difference between previous week's POV and current POV
-        if pov_15_prev and pov_15_prev > 0:
-            wow_change_pct = ((pov_15_curr - pov_15_prev) / pov_15_prev) * 100
+        # 4. Day-over-Day (DtD) Change Calculation
+        # Requires at least 6 days of history to compare Yesterday's 5D rolling window vs Day-Before-Yesterday's 5D rolling window
+        if available_days >= 6:
+            df_prev_day = df_hist.iloc[:-1] 
+            adv_5_prev = df_prev_day['Volume'].tail(5).mean()
+            pov_15_prev = adv_5_prev * 0.15
+            
+            if pov_15_prev > 0 and pov_15_curr != "N/A":
+                dtd_change_pct = ((pov_15_curr - pov_15_prev) / pov_15_prev) * 100
+                dtd_str = f"{dtd_change_pct:+.2f}%"
+            else:
+                dtd_str = "0.00%"
         else:
-            wow_change_pct = 0.0
+            dtd_str = "N/A"
 
-        # 4. Extract Last 6 Completed Trading Days for the Breakdown
-        past_6_days = df_hist.tail(6).copy()
-        past_6_days['Date'] = past_6_days.index.strftime('%Y-%m-%d')
-        historical_volume_list = past_6_days[['Date', 'Volume']].to_dict(orient='records')
+        # 5. Extract available days for the chart breakdown (max 6 days)
+        past_days = df_hist.tail(min(6, available_days)).copy()
+        historical_volume_list = []
+        if not past_days.empty:
+            past_days['Date'] = past_days.index.strftime('%Y-%m-%d')
+            historical_volume_list = past_days[['Date', 'Volume']].to_dict(orient='records')
 
-        # Generate separate rows for standard Lookbacks vs. 15% POV Limits
+        # Structure final matrix output rows with proper institutional naming conventions
         matrix_rows = [
             {
                 "Symbol": ticker_symbol.strip().upper(),
                 "Metric Type": "Standard Lookback ADV",
                 "Current Session Vol": current_vol,
-                "5D Horizon": round(adv_5) if adv_5 else None,
-                "30D Horizon": round(adv_30) if adv_30 else None,
-                "60D Horizon": round(adv_60) if adv_60 else None,
-                "90D Horizon": round(adv_90) if adv_90 else None,
-                "WoW Change (%)": ""  # Only applies to POV limits row
+                "5D Horizon": adv_5,
+                "1M ADV (22D)": adv_22,
+                "2M ADV (44D)": adv_44,
+                "3M ADV (66D)": adv_66,
+                "DtD Change (%)": ""  
             },
             {
                 "Symbol": ticker_symbol.strip().upper(),
-                "Metric Type": "15% POV Execution Limit",
+                "Metric Type": "15% ADV Execution Limit",
                 "Current Session Vol": "",
-                "5D Horizon": round(pov_15_curr) if pov_15_curr else None,
-                "30D Horizon": round(adv_30 * 0.15) if adv_30 else None,
-                "60D Horizon": round(adv_60 * 0.15) if adv_60 else None,
-                "90D Horizon": round(adv_90 * 0.15) if adv_90 else None,
-                "WoW Change (%)": f"{wow_change_pct:+.2f}%" if wow_change_pct else "0.00%"
+                "5D Horizon": pov_15_curr,
+                "1M ADV (22D)": pov_22_curr,
+                "2M ADV (44D)": pov_44_curr,
+                "3M ADV (66D)": pov_66_curr,
+                "DtD Change (%)": dtd_str
             }
         ]
 
@@ -77,9 +90,8 @@ def calculate_comprehensive_metrics(ticker_symbol: str):
 st.set_page_config(page_title="Liquidity Analytics Dashboard", layout="wide")
 
 st.title("📊 Institutional Liquidity & ADV Model")
-st.markdown("Type a ticker symbol to check on-screen lookback metrics, POV rows, and visual volume pacing trends.")
+st.markdown("Type a ticker symbol to check true trading-day lookback metrics, ADV execution tiers, and DtD velocity changes.")
 
-# Persistent state management
 if 'matrix_data' not in st.session_state:
     st.session_state.matrix_data = None
 if 'history_data' not in st.session_state:
@@ -99,9 +111,9 @@ if submit_button:
         res = calculate_comprehensive_metrics(user_input)
         if res:
             st.session_state.matrix_data = pd.DataFrame(res["matrix_rows"])
-            st.session_state.history_data = pd.DataFrame(res["historical_volume"])
+            st.session_state.history_data = pd.DataFrame(res["historical_volume"]) if res["historical_volume"] else None
         else:
-            st.error(f"Could not retrieve data for ticker: {user_input}")
+            st.error(f"Could not retrieve data for ticker: {user_input}. Please confirm symbol syntax is valid.")
     else:
         st.error("Please enter a valid ticker symbol.")
 
@@ -112,35 +124,39 @@ if st.session_state.matrix_data is not None:
     st.subheader("📋 Output Analytics Matrix")
     df_matrix = st.session_state.matrix_data
     
-    # Apply standard comma grouping format to all standard volume columns
+    # FORCED NUMERIC FORMATTING
     format_dict = {}
     for col in df_matrix.columns:
-        if "Horizon" in col or "Vol" in col:
-            format_dict[col] = lambda x: f"{x:,.0f}" if isinstance(x, (int, float)) else str(x)
+        if "Horizon" in col or "ADV" in col or "Vol" in col:
+            format_dict[col] = lambda x: (
+                f"{float(x):,.0f}" if (str(x).replace('.','',1).isdigit() or isinstance(x, (int, float))) 
+                else str(x)
+            )
             
     st.dataframe(df_matrix.style.format(format_dict), use_container_width=True, hide_index=True)
 
     st.markdown("---")
 
-    # 2. 6-Day Historical Volume Block
-    st.subheader("📆 Past 6 Completed Trading Days Volume Breakdown")
+    # 2. Historical Volume Block
+    st.subheader("📆 Historical Completed Trading Days Volume Breakdown")
     
-    df_hist = st.session_state.history_data
-    col_table, col_chart = st.columns([2, 3])
+    if st.session_state.history_data is not None and not st.session_state.history_data.empty:
+        df_hist_display = st.session_state.history_data
+        col_table, col_chart = st.columns([2, 3])
 
-    with col_table:
-        # Display the formatted summary table
-        st.dataframe(
-            df_hist.style.format({"Volume": "{:,.0f}"}),
-            use_container_width=True,
-            hide_index=True
-        )
+        with col_table:
+            st.dataframe(
+                df_hist_display.style.format({"Volume": "{:,.0f}"}),
+                use_container_width=True,
+                hide_index=True
+            )
 
-    with col_chart:
-        # Generate the visual volume pacing column/bar chart
-        st.bar_chart(
-            data=df_hist,
-            x="Date",
-            y="Volume",
-            use_container_width=True
-        )
+        with col_chart:
+            st.bar_chart(
+                data=df_hist_display,
+                x="Date",
+                y="Volume",
+                use_container_width=True
+            )
+    else:
+        st.info("No prior completed trading day volume available to graph yet for this asset.")

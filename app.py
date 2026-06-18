@@ -3,9 +3,6 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-import io
-from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-from openpyxl.utils import get_column_letter
 
 # --- CORE ANALYTICS FUNCTION ---
 def calculate_adv_metrics(ticker_symbol: str):
@@ -38,105 +35,54 @@ def calculate_adv_metrics(ticker_symbol: str):
     except Exception:
         return None
 
-# --- EXCEL FORMATTING FUNCTION ---
-def convert_df_to_excel(df_output):
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df_output.to_excel(writer, sheet_name='Liquidity Analysis', index=False)
-        worksheet = writer.sheets['Liquidity Analysis']
-
-        # Classic Navy Theme
-        header_fill = PatternFill(start_color="1F4E78", end_color="1F4E78", fill_type="solid")
-        header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
-        data_font = Font(name="Calibri", size=11, bold=False)
-
-        for col_num in range(1, len(df_output.columns) + 1):
-            cell = worksheet.cell(row=1, column=col_num)
-            cell.fill = header_fill
-            cell.font = header_font
-            cell.alignment = Alignment(horizontal="center", vertical="center")
-
-        for row_num in range(2, len(df_output) + 2):
-            for col_num in range(1, len(df_output.columns) + 1):
-                cell = worksheet.cell(row=row_num, column=col_num)
-                cell.font = data_font
-                if col_num > 1 and isinstance(cell.value, (int, float)):
-                    cell.number_format = '#,##0'
-
-        for col in worksheet.columns:
-            max_len = max(len(str(cell.value or '')) for cell in col)
-            worksheet.column_dimensions[get_column_letter(col[0].column)].width = max(max_len + 4, 14)
-
-    return output.getvalue()
-
 # --- STREAMLIT USER INTERFACE ---
 st.set_page_config(page_title="Liquidity Analytics Dashboard", layout="wide")
 
 st.title("📊 Institutional Liquidity & ADV Model")
-st.markdown("Input a ticker symbol or a comma-separated list of tickers to generate trading lookback metrics.")
+st.markdown("Type a ticker symbol (or multiple tickers separated by commas) to check on-screen lookback metrics.")
 
-# Initialize session state tracking so calculations persist across actions
+# Persistent data state
 if 'calculated_data' not in st.session_state:
     st.session_state.calculated_data = None
 
-# User Input Interfaces
-input_type = st.radio("Choose Input Method:", ["Single/Multiple Tickers", "Bulk File Upload (.xlsx / .csv)"])
+# Single/Multiple Ticker Manual Input Block
+user_input = st.text_input("Enter Ticker(s) (e.g., CPOP, QMMM, LU):", value="CPOP")
 
-# Reset memory buffer if input method switches
-if st.sidebar.button("Clear Cache / Reset Form"):
+# FIXED BUTTON LAYOUT: Stacked fields ensure buttons never wrap or hide on smaller screens
+run_button = st.button("🚀 Run Liquidity Model", type="primary", use_container_width=True)
+
+if st.button("Reset Screen", use_container_width=True):
     st.session_state.calculated_data = None
     st.rerun()
 
-results_list = []
-
-if input_type == "Single/Multiple Tickers":
-    user_input = st.text_input("Enter Ticker(s) separated by commas:", value="CPOP, QMMM, LU")
-    if st.button("Run Model", type="primary"):
+if run_button:
+    if user_input:
         tickers = [t.strip() for t in user_input.split(",") if t.strip()]
+        results_list = []
+        
         for ticker in tickers:
             res = calculate_adv_metrics(ticker)
-            if res: results_list.append(res)
-            else: st.warning(f"Could not retrieve data for ticker: {ticker}")
+            if res: 
+                results_list.append(res)
+            else: 
+                st.warning(f"Could not retrieve data for ticker: {ticker}")
         
         if results_list:
             st.session_state.calculated_data = pd.DataFrame(results_list)
+    else:
+        st.error("Please enter at least one ticker symbol.")
 
-else:
-    uploaded_file = st.file_uploader("Upload spreadsheet containing a 'symbol' column", type=["csv", "xlsx"])
-    if uploaded_file and st.button("Process Bulk File", type="primary"):
-        if uploaded_file.name.endswith(".csv"):
-            df_file = pd.read_csv(uploaded_file)
-        else:
-            df_file = pd.read_excel(uploaded_file)
-
-        if 'symbol' in df_file.columns:
-            tickers = df_file['symbol'].dropna().unique().tolist()
-            progress_bar = st.progress(0)
-            for idx, ticker in enumerate(tickers):
-                res = calculate_adv_metrics(str(ticker))
-                if res: results_list.append(res)
-                progress_bar.progress((idx + 1) / len(tickers))
-            
-            if results_list:
-                st.session_state.calculated_data = pd.DataFrame(results_list)
-        else:
-            st.error("The spreadsheet must contain a column named exactly 'symbol' (lowercase).")
-
-# --- DISPLAY & EXPORT PERSISTENT RESULTS ---
+# --- ON-SCREEN DATA GRID ---
 if st.session_state.calculated_data is not None:
     df_results = st.session_state.calculated_data
 
     st.subheader("📋 Output Analytics Matrix")
-    # Clean numeric formatting for UI rendering
+    
+    # Clean numeric formatting for commas
     format_dict = {col: "{:,.0f}" for col in df_results.columns if "ADV" in col or "Vol" in col}
-    st.dataframe(df_results.style.format(format_dict))
-
-    # Generate styled Excel file binary inside persistent memory
-    excel_data = convert_df_to_excel(df_results)
-
-    st.download_button(
-        label="📥 Download Formatted Excel Report",
-        data=excel_data,
-        file_name="ADV_Liquidity_Report.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    
+    st.dataframe(
+        df_results.style.format(format_dict), 
+        use_container_width=True, 
+        hide_index=True
     )

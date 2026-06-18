@@ -78,9 +78,12 @@ if st.session_state.calculated_data is not None:
 
     st.subheader("📋 Output Analytics Matrix")
     
-    # Clean numeric formatting for commas
-    format_dict = {col: "{:,.0f}" for col in df_results.columns if "ADV" in col or "Vol" in col}
-    
+    # SAFE FORMATTING: Checks if the value is a number before applying commas
+    format_dict = {
+        col: lambda x: f"{x:,.0f}" if isinstance(x, (int, float)) else str(x)
+        for col in df_results.columns 
+        if "ADV" in col or "Vol" in col
+    }
     st.dataframe(
         df_results.style.format(format_dict), 
         use_container_width=True, 

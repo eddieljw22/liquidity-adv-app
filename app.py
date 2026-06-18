@@ -54,7 +54,7 @@ def calculate_comprehensive_metrics(ticker_symbol: str):
             past_days['Date'] = past_days.index.strftime('%Y-%m-%d')
             historical_volume_list = past_days[['Date', 'Volume']].to_dict(orient='records')
 
-        # Structure final matrix output rows with the new column layout
+        # RESTRUCTURED MATRIX ROWS: Keeps lookbacks and respective limits side-by-side
         matrix_rows = [
             {
                 "Symbol": ticker_symbol.strip().upper(),
@@ -62,6 +62,8 @@ def calculate_comprehensive_metrics(ticker_symbol: str):
                 "Current Session Vol": current_vol,
                 "5D Horizon": adv_5,
                 "Prev 5D ADV": adv_5_prev,
+                "15% POV (5D)": "",
+                "Prev 15% POV": "",
                 "1M ADV (22D)": adv_22,
                 "2M ADV (44D)": adv_44,
                 "3M ADV (66D)": adv_66,
@@ -71,7 +73,9 @@ def calculate_comprehensive_metrics(ticker_symbol: str):
                 "Symbol": ticker_symbol.strip().upper(),
                 "Metric Type": "15% POV Execution Limit",
                 "Current Session Vol": "",
-                "5D Horizon": pov_15_curr,
+                "5D Horizon": "",
+                "Prev 5D ADV": "",
+                "15% POV (5D)": pov_15_curr,
                 "Prev 15% POV": pov_15_prev,
                 "1M ADV (22D)": pov_22_curr,
                 "2M ADV (44D)": pov_44_curr,

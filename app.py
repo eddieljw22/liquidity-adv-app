@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 import streamlit as st
 import yfinance as yf
 import pandas as pd
@@ -43,17 +45,17 @@ st.markdown("Type a ticker symbol (or multiple tickers separated by commas) to c
 if 'calculated_data' not in st.session_state:
     st.session_state.calculated_data = None
 
-# Single/Multiple Ticker Manual Input Block
-user_input = st.text_input("Enter Ticker(s) (e.g., CPOP, QMMM, LU):", value="CPOP")
+# Using a st.form isolates the button state conflicts perfectly
+with st.form(key="liquidity_form"):
+    user_input = st.text_input("Enter Ticker(s) (e.g., CPOP, QMMM, LU):", value="CPOP")
+    submit_button = st.form_submit_button("🚀 Run Liquidity Model", use_container_width=True, type="primary")
 
-# FIXED BUTTON LAYOUT: Stacked fields ensure buttons never wrap or hide on smaller screens
-run_button = st.button("🚀 Run Liquidity Model", type="primary", use_container_width=True)
-
-if st.button("Reset Screen", use_container_width=True):
+# Sidebar handle for cleanly resetting the viewport matrix
+if st.sidebar.button("Reset Matrix Screen", use_container_width=True):
     st.session_state.calculated_data = None
     st.rerun()
 
-if run_button:
+if submit_button:
     if user_input:
         tickers = [t.strip() for t in user_input.split(",") if t.strip()]
         results_list = []

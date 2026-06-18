@@ -8,7 +8,6 @@ import pandas as pd
 def calculate_comprehensive_metrics(ticker_symbol: str):
     try:
         ticker = yf.Ticker(ticker_symbol.strip().upper())
-        # 6 months is plenty of depth to cover a 66 trading day lookback
         df = ticker.history(period="6mo")
 
         if df.empty:
@@ -21,24 +20,22 @@ def calculate_comprehensive_metrics(ticker_symbol: str):
         df_hist = df.iloc[:-1]
         available_days = len(df_hist)
 
-        # 2. Dynamic Trading Day Lookbacks (22 days per market month)
+        # 2. Today's Base Lookbacks (Includes yesterday's volume)
         adv_5  = round(df_hist['Volume'].tail(5).mean())  if available_days >= 5  else "N/A"
         adv_22 = round(df_hist['Volume'].tail(22).mean()) if available_days >= 22 else "N/A"
         adv_44 = round(df_hist['Volume'].tail(44).mean()) if available_days >= 44 else "N/A"
         adv_66 = round(df_hist['Volume'].tail(66).mean()) if available_days >= 66 else "N/A"
         
-        # 3. 15% ADV Limits Based on Refined Averages
         pov_15_curr = round(adv_5 * 0.15)  if adv_5  != "N/A" else "N/A"
         pov_22_curr = round(adv_22 * 0.15) if adv_22 != "N/A" else "N/A"
         pov_44_curr = round(adv_44 * 0.15) if adv_44 != "N/A" else "N/A"
         pov_66_curr = round(adv_66 * 0.15) if adv_66 != "N/A" else "N/A"
 
-        # 4. Day-over-Day (DtD) Change Calculation
-        # Requires at least 6 days of history to compare Yesterday's 5D rolling window vs Day-Before-Yesterday's 5D rolling window
+        # 3. Previous Day's Lookback (Excludes yesterday's volume)
         if available_days >= 6:
             df_prev_day = df_hist.iloc[:-1] 
-            adv_5_prev = df_prev_day['Volume'].tail(5).mean()
-            pov_15_prev = adv_5_prev * 0.15
+            adv_5_prev = round(df_prev_day['Volume'].tail(5).mean())
+            pov_15_prev = round(adv_5_prev * 0.15)
             
             if pov_15_prev > 0 and pov_15_curr != "N/A":
                 dtd_change_pct = ((pov_15_curr - pov_15_prev) / pov_15_prev) * 100
@@ -46,22 +43,25 @@ def calculate_comprehensive_metrics(ticker_symbol: str):
             else:
                 dtd_str = "0.00%"
         else:
+            adv_5_prev = "N/A"
+            pov_15_prev = "N/A"
             dtd_str = "N/A"
 
-        # 5. Extract available days for the chart breakdown (max 6 days)
+        # 4. Extract available days for the chart breakdown (max 6 days)
         past_days = df_hist.tail(min(6, available_days)).copy()
         historical_volume_list = []
         if not past_days.empty:
             past_days['Date'] = past_days.index.strftime('%Y-%m-%d')
             historical_volume_list = past_days[['Date', 'Volume']].to_dict(orient='records')
 
-        # Structure final matrix output rows with proper institutional naming conventions
+        # Structure final matrix output rows with the new column layout
         matrix_rows = [
             {
                 "Symbol": ticker_symbol.strip().upper(),
                 "Metric Type": "Standard Lookback ADV",
                 "Current Session Vol": current_vol,
                 "5D Horizon": adv_5,
+                "Prev 5D ADV": adv_5_prev,
                 "1M ADV (22D)": adv_22,
                 "2M ADV (44D)": adv_44,
                 "3M ADV (66D)": adv_66,
@@ -69,9 +69,10 @@ def calculate_comprehensive_metrics(ticker_symbol: str):
             },
             {
                 "Symbol": ticker_symbol.strip().upper(),
-                "Metric Type": "15% ADV Execution Limit",
+                "Metric Type": "15% POV Execution Limit",
                 "Current Session Vol": "",
                 "5D Horizon": pov_15_curr,
+                "Prev 15% POV": pov_15_prev,
                 "1M ADV (22D)": pov_22_curr,
                 "2M ADV (44D)": pov_44_curr,
                 "3M ADV (66D)": pov_66_curr,
@@ -90,7 +91,7 @@ def calculate_comprehensive_metrics(ticker_symbol: str):
 st.set_page_config(page_title="Liquidity Analytics Dashboard", layout="wide")
 
 st.title("📊 Institutional Liquidity & ADV Model")
-st.markdown("Type a ticker symbol to check true trading-day lookback metrics, ADV execution tiers, and DtD velocity changes.")
+st.markdown("Type a ticker symbol to check true trading-day lookback metrics, POV execution tiers, and DtD velocity changes.")
 
 if 'matrix_data' not in st.session_state:
     st.session_state.matrix_data = None
@@ -127,7 +128,7 @@ if st.session_state.matrix_data is not None:
     # FORCED NUMERIC FORMATTING
     format_dict = {}
     for col in df_matrix.columns:
-        if "Horizon" in col or "ADV" in col or "Vol" in col:
+        if "Horizon" in col or "ADV" in col or "Vol" in col or "POV" in col:
             format_dict[col] = lambda x: (
                 f"{float(x):,.0f}" if (str(x).replace('.','',1).isdigit() or isinstance(x, (int, float))) 
                 else str(x)

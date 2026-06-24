@@ -14,7 +14,12 @@ def calculate_comprehensive_metrics(ticker_symbol: str):
             return None
 
         # 1. Current Session Metrics
-        current_vol = int(df['Volume'].iloc[-1])
+        try:
+            # Captures extended hours / live tape volume directly from fast_info
+            current_vol = int(ticker.fast_info['lastVolume'])
+        except Exception:
+            # Fallback to standard history row if fast_info encounters an API limitation
+            current_vol = int(df['Volume'].iloc[-1]) if not df.empty else 0
         
         # Isolate history up to yesterday (excludes live session)
         df_hist = df.iloc[:-1]

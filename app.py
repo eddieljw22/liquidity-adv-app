@@ -20,33 +20,14 @@ def calculate_comprehensive_metrics(ticker_symbol: str):
             # Today's live/pre-market bar exists as the last row.
             # Isolate history up to yesterday (excludes today's live session)
             df_hist = df.iloc[:-1]
+            current_vol = int(df['Volume'].iloc[-1])
         else:
             # It's pre-market or a weekend; the last row is actually the most recent completed session (e.g., Friday).
             # Keep the entire dataframe as history because today's bar hasn't been generated yet.
             df_hist = df
+            current_vol = 0
 
         available_days = len(df_hist)
-        # 1. Current Session Metrics
-        try:
-            # Pull a 2-day window at 5-minute intervals to guarantee we get the rolling pre-market tail
-            df_intraday = ticker.history(period="2d", interval="5m", prepost=True)
-            
-            if not df_intraday.empty:
-                # Format the index to match today's date string format (YYYY-MM-DD)
-                df_intraday['DateStr'] = df_intraday.index.strftime('%Y-%m-%d')
-                
-                # Filter specifically for rows that belong to today's active date session
-                df_today = df_intraday[df_intraday['DateStr'] == today_str]
-                
-                if not df_today.empty:
-                    current_vol = int(df_today['Volume'].sum())
-                else:
-                    current_vol = 0  # Zero trades have happened anywhere in pre-market yet
-            else:
-                current_vol = 0
-        except Exception:
-            # Fallback to standard history row if fast_info encounters an API limitation
-            current_vol = int(df['Volume'].iloc[-1]) if last_row_date == today_str else 0
 
         # 2. Today's Base Lookbacks (Includes yesterday's volume)
         adv_5  = round(df_hist['Volume'].tail(5).mean())  if available_days >= 5  else "N/A"
@@ -87,7 +68,7 @@ def calculate_comprehensive_metrics(ticker_symbol: str):
             {
                 "Symbol": ticker_symbol.strip().upper(),
                 "Metric Type": "Standard Lookback ADV",
-                "Current Session Vol": current_vol,
+                "Latest Session Vol": current_vol,
                 "5D ADV": adv_5,
                 "Prev 5D ADV": adv_5_prev,
                 "1M ADV (22D)": adv_22,
@@ -98,7 +79,7 @@ def calculate_comprehensive_metrics(ticker_symbol: str):
             {
                 "Symbol": ticker_symbol.strip().upper(),
                 "Metric Type": "15% ADV Execution Limit",
-                "Current Session Vol": "",
+                "Latest Session Vol": "",
                 "5D ADV": pov_15_curr,
                 "Prev 5D ADV": pov_15_prev,
                 "1M ADV (22D)": pov_22_curr,

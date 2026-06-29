@@ -15,6 +15,17 @@ def calculate_comprehensive_metrics(ticker_symbol: str):
         # Determine today's date in local market context (YYYY-MM-DD)
         today_str = datetime.now().strftime('%Y-%m-%d')
         last_row_date = df.index[-1].strftime('%Y-%m-%d')
+        # --- REAL-TIME INTRA-DAY/PRE-MARKET CONDITION ---
+        if last_row_date == today_str:
+            # Today's live/pre-market bar exists as the last row.
+            # Isolate history up to yesterday (excludes today's live session)
+            df_hist = df.iloc[:-1]
+        else:
+            # It's pre-market or a weekend; the last row is actually the most recent completed session (e.g., Friday).
+            # Keep the entire dataframe as history because today's bar hasn't been generated yet.
+            df_hist = df
+
+        available_days = len(df_hist)
         # 1. Current Session Metrics
         try:
             # Captures extended hours / live tape volume directly from fast_info
@@ -22,10 +33,6 @@ def calculate_comprehensive_metrics(ticker_symbol: str):
         except Exception:
             # Fallback to standard history row if fast_info encounters an API limitation
             current_vol = int(df['Volume'].iloc[-1]) if last_row_date == today_str else 0
-        
-        # Isolate history up to yesterday (excludes live session)
-        df_hist = df.iloc[:-1]
-        available_days = len(df_hist)
 
         # 2. Today's Base Lookbacks (Includes yesterday's volume)
         adv_5  = round(df_hist['Volume'].tail(5).mean())  if available_days >= 5  else "N/A"

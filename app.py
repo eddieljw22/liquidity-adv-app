@@ -28,11 +28,20 @@ def calculate_comprehensive_metrics(ticker_symbol: str):
         available_days = len(df_hist)
         # 1. Current Session Metrics
         try:
-            # Download today's data at a 5-minute interval including pre-market activity
-            df_today = ticker.history(period="1d", interval="5m", prepost=True)
-            if not df_today.empty:
-                # Sum all volume bars generated since midnight
-                current_vol = int(df_today['Volume'].sum())
+            # Pull a 2-day window at 5-minute intervals to guarantee we get the rolling pre-market tail
+            df_intraday = ticker.history(period="2d", interval="5m", prepost=True)
+            
+            if not df_intraday.empty:
+                # Format the index to match today's date string format (YYYY-MM-DD)
+                df_intraday['DateStr'] = df_intraday.index.strftime('%Y-%m-%d')
+                
+                # Filter specifically for rows that belong to today's active date session
+                df_today = df_intraday[df_intraday['DateStr'] == today_str]
+                
+                if not df_today.empty:
+                    current_vol = int(df_today['Volume'].sum())
+                else:
+                    current_vol = 0  # Zero trades have happened anywhere in pre-market yet
             else:
                 current_vol = 0
         except Exception:

@@ -3,7 +3,7 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-import datetime import datetime
+from datetime import datetime
 # --- CORE ANALYTICS ENGINE ---
 def calculate_comprehensive_metrics(ticker_symbol: str):
     try:

@@ -3,7 +3,7 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-
+import datetime import datetime
 # --- CORE ANALYTICS ENGINE ---
 def calculate_comprehensive_metrics(ticker_symbol: str):
     try:
@@ -12,14 +12,16 @@ def calculate_comprehensive_metrics(ticker_symbol: str):
 
         if df.empty:
             return None
-
+        # Determine today's date in local market context (YYYY-MM-DD)
+        today_str = datetime.now().strftime('%Y-%m-%d')
+        last_row_date = df.index[-1].strftime('%Y-%m-%d')
         # 1. Current Session Metrics
         try:
             # Captures extended hours / live tape volume directly from fast_info
             current_vol = int(ticker.fast_info['lastVolume'])
         except Exception:
             # Fallback to standard history row if fast_info encounters an API limitation
-            current_vol = int(df['Volume'].iloc[-1]) if not df.empty else 0
+            current_vol = int(df['Volume'].iloc[-1]) if last_row_date == today_str else 0
         
         # Isolate history up to yesterday (excludes live session)
         df_hist = df.iloc[:-1]

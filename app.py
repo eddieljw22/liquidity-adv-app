@@ -25,7 +25,7 @@ def calculate_comprehensive_metrics(ticker_symbol: str):
             # It's pre-market or a weekend; the last row is actually the most recent completed session (e.g., Friday).
             # Keep the entire dataframe as history because today's bar hasn't been generated yet.
             df_hist = df
-            current_vol = 0
+            current_vol = int(df['Volume'].iloc[-1])
 
         available_days = len(df_hist)
 

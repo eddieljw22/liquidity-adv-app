@@ -27,9 +27,14 @@ def calculate_comprehensive_metrics(ticker_symbol: str):
 
         available_days = len(df_hist)
         # 1. Current Session Metrics
-        try:
-            # Captures extended hours / live tape volume directly from fast_info
-            current_vol = int(ticker.fast_info['lastVolume'])
+            try:
+                # Download today's data at a 5-minute interval including pre-market activity
+                df_today = ticker.history(period="1d", interval="5m", prepost=True)
+                if not df_today.empty:
+                    # Sum all volume bars generated since midnight
+                    current_vol = int(df_today['Volume'].sum())
+                else:
+                    current_vol = 0
         except Exception:
             # Fallback to standard history row if fast_info encounters an API limitation
             current_vol = int(df['Volume'].iloc[-1]) if last_row_date == today_str else 0
